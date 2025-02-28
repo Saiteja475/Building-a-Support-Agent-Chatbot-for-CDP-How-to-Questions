@@ -1,0 +1,114 @@
+import requests
+from bs4 import BeautifulSoup
+import tkinter as tk
+from tkinter import scrolledtext
+from fuzzywuzzy import process
+import nltk
+from nltk.corpus import stopwords
+
+nltk.download("stopwords")
+stop_words = set(stopwords.words("english"))
+
+# Function to scrape documentation content
+def scrape_cdp_docs(url):
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, "html.parser")
+            content = soup.get_text()
+            return content
+        else:
+            return "Failed to retrieve documentation."
+    except Exception as e:
+        return f"Error occurred: {e}"
+
+# Fetch documentation
+segment_docs = scrape_cdp_docs("https://segment.com/docs/")
+mparticle_docs = scrape_cdp_docs("https://docs.mparticle.com/")
+lytics_docs = scrape_cdp_docs("https://docs.lytics.com/")
+zeotap_docs = scrape_cdp_docs("https://docs.zeotap.com/home/en-us/")
+
+cdp_docs = {
+    "Segment": segment_docs,
+    "mParticle": mparticle_docs,
+    "Lytics": lytics_docs,
+    "Zeotap": zeotap_docs
+}
+
+# Preprocessing User Query
+def preprocess_query(query):
+    words = query.lower().split()
+    filtered_words = [word for word in words if word not in stop_words]
+    return " ".join(filtered_words)
+
+# Function to Check Irrelevant Questions
+def is_irrelevant_question(query):
+    irrelevant_keywords = ["movie", "weather", "release", "actor", "news", "rain", "forecast", "temperature"]
+    for word in irrelevant_keywords:
+        if word in query.lower():
+            return True
+    return False
+
+# Function to Answer Questions
+def answer_question(user_query):
+    user_query = preprocess_query(user_query)
+
+    if is_irrelevant_question(user_query):
+        return "This is a CDP chatbot. I can't answer weather or movie-related questions."
+
+    if "create user profile" in user_query and "mparticle" in user_query:
+        return "From mParticle Documentation: Create New Profile"
+    if "integrate data" in user_query and "zeotap" in user_query:
+        return "From Zeotap Documentation: Add New Integration"
+
+    best_match = None
+    best_score = 0
+    best_cdp = None
+
+    for cdp, doc in cdp_docs.items():
+        if doc != "Failed to retrieve documentation.":
+            match, score = process.extractOne(user_query, doc.split("\n"))
+            if score > best_score:
+                best_match, best_score, best_cdp = match, score, cdp
+
+    if best_score > 50:
+        return f"From {best_cdp} Documentation:\n{best_match}"
+    else:
+        return "Sorry, I couldn't find any relevant information."
+
+# GUI using Tkinter
+def get_answer():
+    question = user_input.get()
+    if question.strip() == "":
+        return
+    response = answer_question(question)
+    chat_output.insert(tk.END, f"\nUser: {question}\nBot: {response}\n")
+    user_input.delete(0, tk.END)
+
+# Tkinter Window Setup
+root = tk.Tk()
+root.title("CDP Support Agent Chatbot")
+root.geometry("700x500")
+root.configure(bg="#dbe9f6")
+
+# Chatbot Title Label
+title = tk.Label(root, text="CDP Support Agent Chatbot", font=("Arial", 18), bg="#dbe9f6", fg="#333")
+title.pack(pady=10)
+
+# Chat Output Box
+chat_output = scrolledtext.ScrolledText(root, width=80, height=20, wrap=tk.WORD, bg="#ffffff", fg="#333")
+chat_output.pack(pady=10)
+
+# User Input Box
+user_input = tk.Entry(root, width=80)
+user_input.pack(pady=5)
+
+# Send Button
+send_button = tk.Button(root, text="Ask", command=get_answer, bg="#4CAF50", fg="white", font=("Arial", 12))
+send_button.pack(pady=5)
+
+# Exit Button
+exit_button = tk.Button(root, text="Exit", command=root.quit, bg="#ff4c4c", fg="white", font=("Arial", 12))
+exit_button.pack(pady=5)
+
+root.mainloop()
